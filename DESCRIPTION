@@ -1,0 +1,21 @@
+Package: Rrastertools
+Type: Package
+Title: Raster geoprocessing functions
+Version: 0.1.0
+Author: Steven Pawley
+Maintainer: Steven Pawley <dr.stevenpawley@gmail.com>
+Description: Provides various utility functions related to the R 'raster',
+    'sf', and 'sp' packages
+License: GPL-3 | file LICENSE
+Depends:
+	raster,
+	spatial.tools,
+	parallel,
+	rgrass7,
+	link2GI,
+	sf,
+	magrittr,
+	KernSmooth
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.1.0
