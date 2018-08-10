@@ -1,17 +1,12 @@
 #' 2d kernel density estimation for raster data
 #'
 #' @param data.points SpatialPointsDataFrame object
+#' @param y RasterLayer object to use as a template for the output of the
+#' kernel density estimator, optional.
 #' @param xcells number of grid cells in x dimension of output raster
 #' @param ycells number of grid cells in y dimension of output raster
-#' @param xmin 
-#' @param xmax 
-#' @param ymin 
-#' @param ymax 
-#'
 #' @return
 #' @export
-#'
-#' @examples
 kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL) {
     
     # get the coordinates
