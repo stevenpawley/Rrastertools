@@ -9,14 +9,15 @@ Description: Provides various utility functions related to the R 'raster',
 License: GPL-3 | file LICENSE
 Depends:
 	raster,
+	sf
+	magrittr
+Imports:
+	rgrass7,
+	KernSmooth,
 	spatial.tools,
 	parallel,
 	link2GI,
-	sf,
-	magrittr,
-	KernSmooth
-Imports:
-	rgrass7
+	NISTunits
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.0
