@@ -9,7 +9,7 @@ Description: Provides various utility functions related to the R 'raster',
 License: GPL-3 | file LICENSE
 Depends:
 	raster,
-	sf
+	sf,
 	magrittr
 Imports:
 	rgrass7,
