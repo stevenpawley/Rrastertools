@@ -72,10 +72,10 @@ proximityMapFeatures = function(geomap, field, rasterlayer, parallel = TRUE,
       FUN = f, geomap, field, rasterlayer)
   }
   
-  proximities = stack(proxmities)
+  proximities = stack(proximities)
   proximities = setNames(proximities, classes)
   
-  return(stack(proximities))
+  return(proximities)
 }
 
 
