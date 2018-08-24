@@ -97,6 +97,9 @@ rotatedCoordinateGrids = function(object, n_angles) {
   }
   
   anglegrids = anglegrids[2:ncol(anglegrids)]
+  anglegrids = raster::stack(anglegrids)
+  
+  return(anglegrids)
 }
 
 
@@ -111,18 +114,20 @@ xyCoordinateGrids = function(object) {
   xy_coords = raster::xyFromCell(object, cell = 1:raster::ncell(object))
   
   object[['xgrid']] = raster(
-    nrows = nrow(gr),
-    ncols = ncol(gr),
-    ext = extent(gr),
-    crs = crs(gr),
+    nrows = nrow(object),
+    ncols = ncol(object),
+    ext = extent(object),
+    crs = crs(object),
     vals = xy_coords[,1])
   
   object[['ygrid']] = raster(
-    nrows = nrow(gr),
-    ncols = ncol(gr),
-    ext = extent(gr),
-    crs = crs(gr),
+    nrows = nrow(object),
+    ncols = ncol(object),
+    ext = extent(object),
+    crs = crs(object),
     vals = xy_coords[,2])
+  
+  object = object[[c('xgrid', 'ygrid')]]
   
   return(object)
 }
