@@ -212,3 +212,48 @@ hillshadePCA = function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
   
   return(list(hillshade=hillshade_pca, pca=pca))
 }
+
+
+#' Creates a RasterStack object containing euclidean distances to points
+#'
+#' @param points sf object
+#' @param rasterlayer RasterLayer object to use as grid template
+#' @param field character, name of field to group points into classes
+#' @param n_classes numeric, number of classes
+#' @param method character, either 'equal_intervals' or 'quantiles'
+#' Used to create groups of points based on the field attribute
+#'
+#' @return RasterStack object of point distances
+#' @export
+distanceFromPointIntervals = function(points, rasterlayer, field = NULL,
+                                       n_classes = 10,
+                                       method = 'equal_intervals') {
+
+  if (missing(field))
+    stop('Field attribute must be supplied')
+  
+  # create point buffers
+  if (method == 'equal_intervals') {
+    classes = cut(points[[field]],
+                  breaks=seq(min(points[[field]]),
+                             max(points[[field]]),
+                             length = n_classes))
+  
+  } else if (method == 'quantiles') {
+    classes = cut(points[[field]],
+                  breaks = stats::quantile(points[[field]],
+                                           probs = seq(0, 1, length.out = n_classes),
+                                           include.lowest = TRUE))
+  }
+  
+  buffer_grids = lapply(
+    split(picks, classes),
+    function(points, raster_grid) {
+      raster::distanceFromPoints(raster_grid, xy = as(points, "Spatial"))
+    },
+    raster_grid = rasterlayer) %>% stack()
+  
+  names(buffer_grids) = paste0('buffer', seq(1, nlayers(buffer_grids)))
+  
+  return(buffer_grids)
+}
