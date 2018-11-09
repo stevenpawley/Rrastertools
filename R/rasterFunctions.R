@@ -262,3 +262,74 @@ distanceFromPointIntervals = function(points, rasterlayer, field = NULL,
   
   return(buffer_grids)
 }
+
+#' Title
+#'
+#' @param x filename, character. Paths to raster files to be stacked using a
+#' gdal VRT
+#' @param resolution character ("highest"|"lowest"|"average"|"user", default = 'highest').
+#' Control the output resolution. 'user' must be used in combination with the
+#' 'res' argument
+#' @param res numeric, optional. Numeric c(x-res, y-res) to set the output 
+#' resolution of the stack if 'resolution' = 'user'
+#' @param extent numeric. c(xmin, ymin, xmax, ymax). Output extent of stack.
+#' If omitted then the bounding box of all inputs is used
+#' @param method character ("nearest" (default) | "bilinear" | "cubic" | "cubicspline" | "lanczos" | "average" | "mode")
+#' Resampling method
+#' @param allow_projection_difference logical, default = TRUE. Accept inputs 
+#' with different projections. Use only when the projection is not properly set
+#' for some of the input layers as this argument does not reproject
+#' @param filename character, optional. Filename for the .vrt file. If omitted
+#' then a tempfile is used
+#' @param overwrite logical, default = FALSE. Overwrite a .vrt file.
+#'
+#' @return
+#' @export
+#'
+#' @examples
+stack_vrt = function(x,
+                     resolution = 'highest',
+                     res = NULL,
+                     extent = NULL,
+                     method = 'nearest',
+                     allow_projection_difference = TRUE,
+                     filename = NULL,
+                     overwrite = FALSE) {
+  # some checks
+  ## use tempfile is filename not given
+  if (missing(filename))
+    filename = tempfile(fileext = '.vrt')
+  
+  ## check that res is specified if resolution = 'user'
+  if (resolution == 'user' & missing(res))
+    stop('For resolution = "user" then "res" must be specified')
+  
+  ## if res only contains a single number then assume equal x&y resolution
+  if (!is.null(res))
+    if (length(res) == 1)
+      res = c(res, res)
+  
+  # build vrt
+  buildvrt = pryr::partial(
+    gdalUtils::gdalbuildvrt,
+    gdalfile = x,
+    output.vrt = filename,
+    resolution = resolution,
+    separate = TRUE,
+    allow_projection_difference = allow_projection_difference,
+    r = method,
+    res = res,
+    overwrite = overwrite
+    )
+    
+  if (missing(extent)) {
+    buildvrt()
+  } else {
+    buildvrt(te = extent)
+  }
+
+  r = raster::brick(filename)
+  names(r) = tools::file_path_sans_ext(basename(x))
+  
+  return(r)
+}
