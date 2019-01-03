@@ -1,81 +1,139 @@
 #' Calculate grid distances to spatial features
-#' 
+#'
 #' This function splits a simple features object based on an attribute field
-#' and rasterizes each category. Grid distances are then calculated to each 
+#' and rasterizes each category. Grid distances are then calculated to each
 #' categorical raster separately. This function represents an alternative to
-#' one-hot encoding or using rasters that represent categorical features. 
+#' one-hot encoding or using rasters that represent categorical features.
 #' However, instead of those features have distinct boundaries, the boundaries
 #' here represent 'soft' margins defined by the proximity to the feature. This
 #' avoids imprints of the polygons occurring in spatial predictions.
 #'
-#' @param geomap sf object
-#' @param field name of attribute that defines categories in the geomap to 
+#' @param sf_obj sf object
+#' @param field name of attribute that defines categories in the geomap to
 #' calculate grid distances to
 #' @param rasterlayer RasterLayer object to use as a template for the grid
 #' distances
-#' @param parallel logical, use parallel processing. Default is TRUE
-#' @param n_jobs numeric, number of processor cores. Default is ncores-1
+#' @param geomap n_jobs, number of processing cores, default = 1
 #'
 #' @return RasterStack of grid distances
 #' @export
-proximityMapFeatures = function(geomap, field, rasterlayer, parallel = TRUE, 
-                                n_jobs = NULL) {
-  
-  f = function(X, geomap, field, rasterlayer, ...) {
-    # function to calculate proximity to simple feature geometries
-    
-    selected_poly = geomap[geomap[[field]] == X, ]
-    
-    if (nrow(selected_poly) > 0) {
-      ras = raster::rasterize(selected_poly, rasterlayer)
-      dist_to_ras = raster::distance(ras, doEdge = TRUE)
-    } else {
-      dist_to_ras = NA
-    }
-    
-    return(dist_to_ras)
+proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
+
+  # some checks
+  if (is(rasterlayer, "RasterStack") | is(rasterlayer, "RasterBrick")) {
+    rasterlayer <- rasterlayer[[1]]
   }
-  
-  # get the categories to split the feature by
-  classes = as.character(unique(geomap[[field]]))
-  
-  if (parallel == TRUE) {
-  
-    tryCatch(
-      expr = {
-        # initiate a cluster with the required packages
-        if (missing(n_jobs))
-          n_jobs = parallel::detectCores()-1
-        
-        cl = parallel::makeCluster(n_jobs)
-        clusterEvalQ(cl, library(sf))
-        clusterEvalQ(cl, library(raster))
 
-        # calculate proximity to features in parallel
-        proximities = parallel::parLapply(
-          cl = cl,
-          X = classes,
-          fun = f, geomap=geomap, field=field, rasterlayer=rasterlayer)
-        },
-      
-      finally = {
-        # close the cluster
-        parallel::stopCluster(cl)
-        }
-      )
+  if (is(sf_obj, "sf") == FALSE) {
+    stop("geomap must be a simple features dataframe")
+  }
 
-    
-    # single-threaded version
+  if (missing(field)) {
+    stop("field must be specified")
+  }
+
+  # rasterize shapes based on field attribute
+  rasterized_shapes <- fasterize::fasterize(
+    raster = rasterlayer,
+    sf = sf_obj,
+    by = field
+  )
+
+  raster_stats <- sapply(1:raster::nlayers(rasterized_shapes), function(i)
+    raster::maxValue(rasterized_shapes[[i]]))
+  invalid_layers <- which(is.na(raster_stats))
+
+  rasterized_shapes <- raster::dropLayer(rasterized_shapes, invalid_layers)
+
+  # calculate distances
+  dist_fun <- function(i) {
+    prox <- raster::distance(rasterized_shapes[[i]])
+    names(prox) <- paste("proximity", names(rasterized_shapes)[[i]], sep = ".")
+    return(prox)
+  }
+
+  if (n_jobs == 1) {
+    proximities <- lapply(1:raster::nlayers(rasterized_shapes), dist_fun)
   } else {
-    proximities = lapply(
-      X = classes,
-      FUN = f, geomap, field, rasterlayer)
+    cl <- parallel::makeCluster(n_jobs)
+    clusterExport(cl, "rasterized_shapes")
+    clusterEvalQ(cl, "raster")
+    proximities <- parallel::parLapply(cl, 1:raster::nlayers(rasterized_shapes), dist_fun)
+    parallel::stopCluster(cl)
   }
-  
-  proximities = stack(proximities)
-  proximities = setNames(proximities, classes)
-  
+  proximities <- raster::stack(proximities)
+
   return(proximities)
+}
+
+#' Corner-based Euclidean Distance Fields
+#' 
+#' Calculates corner-based related euclidean distance fields
+#' (Behrens et al., 2018) to use as predictors in spatial models
+#'
+#' @param object RasterLayer object to use as a template
+#'
+#' @return RasterStack containing corner and centre coordinate EDM grids
+#' @export
+#'
+#' @examples
+euclideanDistanceFields <- function(object) {
+  
+  ext <- raster::extent(object)
+  
+  # top left
+  topleft <- raster::raster(nrows = raster::nrow(object),
+                            ncols = raster::ncol(object),
+                            resolution = raster::res(object),
+                            crs = raster::crs(object),
+                            ext = ext)
+  topleft[1, 1] <- 1
+  topleft <- raster::distance(topleft)
+  
+  # top right
+  topright <- raster::raster(nrows = raster::nrow(object),
+                             ncols = raster::ncol(object),
+                             resolution = raster::res(object),
+                             crs = raster::crs(object),
+                             ext = ext)
+  topright[1, ncol(object)] <- 1
+  topright <- raster::distance(topright)
+  
+  # bottom left
+  bottomleft <- raster::raster(nrows = raster::nrow(object),
+                               ncols = raster::ncol(object),
+                               resolution = raster::res(object),
+                               crs = raster::crs(object),
+                               ext = ext)
+  bottomleft[nrow(object), 1] <- 1
+  bottomleft <- raster::distance(bottomleft)
+  
+  # bottom right
+  bottomright <- raster::raster(nrows = raster::nrow(object),
+                                ncols = raster::ncol(object),
+                                resolution = raster::res(object),
+                                crs = raster::crs(object),
+                                ext = ext)
+  bottomright[nrow(object), ncol(object)] <- 1
+  bottomright <- raster::distance(bottomright)
+  
+  # centre
+  centre <- raster::raster(nrows = raster::nrow(object),
+                           ncols = raster::ncol(object),
+                           resolution = raster::res(object),
+                           crs = raster::crs(object),
+                           ext = ext)
+  centre[as.integer(nrow(object)/2), as.integer(ncol(object)/2)] <- 1
+  centre <- raster::distance(centre)
+  
+  EDM <- raster::stack(topleft, topright, centre, bottomleft, bottomright)
+  EDM <- setNames(EDM,
+                  c('EDM_topleft',
+                    'EDM_topright',
+                    'EDM_centre',
+                    'EDM_bottomleft',
+                    'EDM_bottomright'))
+  return(EDM)
 }
 
 
@@ -86,19 +144,18 @@ proximityMapFeatures = function(geomap, field, rasterlayer, parallel = TRUE,
 #'
 #' @return RasterStack object
 #' @export
-rotatedCoordinateGrids = function(object, n_angles) {
-  
-  anglegrids = as(object, "SpatialGridDataFrame")
-  angles = NISTunits::NISTdegTOradian(seq(from = 0, to = 180, length.out = n_angles))
-  
+rotatedCoordinateGrids <- function(object, n_angles) {
+  anglegrids <- as(object, "SpatialGridDataFrame")
+  angles <- NISTunits::NISTdegTOradian(seq(from = 0, to = 180, length.out = n_angles))
+
   for (i in seq_along(angles)) {
-    newlayer = paste0('angle', i)
-    anglegrids[[newlayer]] = coordinates(object)[,1] + angles[i] * coordinates(object)[,2]
+    newlayer <- paste0("angle", i)
+    anglegrids[[newlayer]] <- coordinates(object)[, 1] + angles[i] * coordinates(object)[, 2]
   }
-  
-  anglegrids = anglegrids[2:ncol(anglegrids)]
-  anglegrids = raster::stack(anglegrids)
-  
+
+  anglegrids <- anglegrids[2:ncol(anglegrids)]
+  anglegrids <- raster::stack(anglegrids)
+
   return(anglegrids)
 }
 
@@ -109,27 +166,28 @@ rotatedCoordinateGrids = function(object, n_angles) {
 #'
 #' @return RasterStack object
 #' @export
-xyCoordinateGrids = function(object) {
-  
-  xy_coords = raster::xyFromCell(object, cell = 1:raster::ncell(object))
-  object = raster::stack(object)
-  
-  object[['xgrid']] = raster(
+xyCoordinateGrids <- function(object) {
+  xy_coords <- raster::xyFromCell(object, cell = 1:raster::ncell(object))
+  object <- raster::stack(object)
+
+  object[["xgrid"]] <- raster(
     nrows = nrow(object),
     ncols = ncol(object),
     ext = extent(object),
     crs = crs(object),
-    vals = xy_coords[,1])
-  
-  object[['ygrid']] = raster(
+    vals = xy_coords[, 1]
+  )
+
+  object[["ygrid"]] <- raster(
     nrows = nrow(object),
     ncols = ncol(object),
     ext = extent(object),
     crs = crs(object),
-    vals = xy_coords[,2])
-  
-  object = object[[c('xgrid', 'ygrid')]]
-  
+    vals = xy_coords[, 2]
+  )
+
+  object <- object[[c("xgrid", "ygrid")]]
+
   return(object)
 }
 
@@ -144,79 +202,56 @@ xyCoordinateGrids = function(object) {
 #' @return
 #' @export
 kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL) {
-  
+
   # get the coordinates
   coords <- sp::coordinates(data.points)
-  
+
   # bandwidth selection
   selected.xbandwidth <- KernSmooth::dpik(coords[, 1])
   selected.ybandwidth <- KernSmooth::dpik(coords[, 2])
-  
+
   # get dimensions to perform the estimation over from raster if supplied
   if (!is.null(y)) {
-    ext = raster::extent(y)
-    xcells = raster::ncol(y)
-    ycells = raster::nrow(y)
-    
+    ext <- raster::extent(y)
+    xcells <- raster::ncol(y)
+    ycells <- raster::nrow(y)
+
     # get dimensions to perform the estimation over from bbox of data.points
   } else {
-    ext = sp::bbox(data.points)
-    
-    if (is.null(xcells) | is.null(ycells))
-      stop('Need to supply xcells and ycells if a raster object is not supplied')
+    ext <- sp::bbox(data.points)
+
+    if (is.null(xcells) | is.null(ycells)) {
+      stop("Need to supply xcells and ycells if a raster object is not supplied")
+    }
   }
-  
-  xmin = ext[1, 1]
-  xmax = ext[1, 2]
-  ymin = ext[2, 1]
-  ymax = ext[2, 2]
-  
+
+  xmin <- ext[1, 1]
+  xmax <- ext[1, 2]
+  ymin <- ext[2, 1]
+  ymax <- ext[2, 2]
+
   # compute the 2D binned kernel density estimate
   est <- KernSmooth::bkde2D(
     coords,
     bandwidth = c(selected.xbandwidth, selected.ybandwidth),
     gridsize = c(xcells, ycells),
-    range.x = list(c(xmin, xmax),
-                   c(ymin, ymax))
+    range.x = list(
+      c(xmin, xmax),
+      c(ymin, ymax)
+    )
   )
-  
+
   # create raster
-  est.raster = raster::raster(
+  est.raster <- raster::raster(
     list(
       x = est$x1,
       y = est$x2,
       z = est$fhat
-    ))
+    )
+  )
   raster::projection(est.raster) <- sp::crs(data.points)
-  
-  return (est.raster)
-}
 
-
-#' Hillshade PCA function
-#'
-#' @param x RasterLayer object representing a DEM
-#' @param azi numeric vector of azimuth of different shading directions
-#' @param n numeric, number of pixels to sample for PCA. Default = 5000
-#'
-#' @return list, containing hillshade pca and the associated prcomp class
-#' @export
-
-hillshadePCA = function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
-  # generate hillshades
-  slope = raster::terrain(x, opt = 'slope')
-  aspect = raster::terrain(x, opt = 'aspect')
-  azi_shades = stack(lapply(azi, function(x) raster::hillShade(
-    slope, aspect, angle=x, normalize = T)))
-  
-  # train pca
-  sr = raster::sampleRandom(azi_shades, n)
-  pca = stats::prcomp(sr) 
-  
-  # create new rasters from PCA predictions
-  hillshade_pca = stats::predict(azi_shades, pca, index=1:3)
-  
-  return(list(hillshade=hillshade_pca, pca=pca))
+  return(est.raster)
 }
 
 
@@ -231,106 +266,81 @@ hillshadePCA = function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
 #'
 #' @return RasterStack object of point distances
 #' @export
-distanceFromPointIntervals = function(points, rasterlayer, field = NULL,
+distanceFromPointIntervals <- function(points, rasterlayer, field = NULL,
                                        n_classes = 10,
-                                       method = 'equal_intervals') {
-
-  if (missing(field))
-    stop('Field attribute must be supplied')
-  
-  # create point buffers
-  if (method == 'equal_intervals') {
-    classes = cut(points[[field]],
-                  breaks=seq(min(points[[field]]),
-                             max(points[[field]]),
-                             length = n_classes))
-  
-  } else if (method == 'quantiles') {
-    classes = cut(points[[field]],
-                  breaks = stats::quantile(points[[field]],
-                                           probs = seq(0, 1, length.out = n_classes),
-                                           include.lowest = TRUE))
+                                       method = "equal_intervals") {
+  if (missing(field)) {
+    stop("Field attribute must be supplied")
   }
-  
-  buffer_grids = lapply(
+
+  # create point buffers
+  if (method == "equal_intervals") {
+    classes <- cut(points[[field]],
+      breaks = seq(min(points[[field]]),
+        max(points[[field]]),
+        length = n_classes
+      )
+    )
+  } else if (method == "quantiles") {
+    classes <- cut(points[[field]],
+      breaks = stats::quantile(points[[field]],
+        probs = seq(0, 1, length.out = n_classes),
+        include.lowest = TRUE
+      )
+    )
+  }
+
+  buffer_grids <- lapply(
     split(picks, classes),
     function(points, raster_grid) {
       raster::distanceFromPoints(raster_grid, xy = as(points, "Spatial"))
     },
-    raster_grid = rasterlayer) %>% stack()
+    raster_grid = rasterlayer
+  ) %>% stack()
+
+  names(buffer_grids) <- paste0("buffer", seq(1, nlayers(buffer_grids)))
+
+  return(buffer_grids)
+}
+
+
+#' Sample-based euclidean distance fields
+#' 
+#' Calculates sample-based euclidean distance fields, i.e. buffer distances
+#' to each point in a simple features object
+#'
+#' @param object RasterLayer to use as template
+#' @param sf_obj Simple features object containing POINT geometries
+#' @param n_jobs numeric, optionally use parallel calculation over multiple cores
+#'
+#' @return RasterStack of sample-based EDMs
+#' @export
+#'
+#' @examples
+sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
   
-  names(buffer_grids) = paste0('buffer', seq(1, nlayers(buffer_grids)))
+  if (n_jobs == 1) {
+    
+    buffer_grids <- lapply(seq_along(sf_obj), function(i)
+      raster::distanceFromPoints(object, xy = as(sf_obj[i, ], "Spatial")))
+    
+  } else {
+    
+    cl <- parallel::makeCluster(n_jobs)
+    parallel::clusterEvalQ(cl, "raster")
+    parallel::clusterExport(cl, c("object", "sf_obj"))
+
+    sf_obj <- as(sf_obj, "Spatial")
+    
+    buffer_grids <- parallel::parLapply(cl, seq_along(sf_obj), function(i)
+      raster::distanceFromPoints(object, xy = sf_obj[i, ]))
+    
+    parallel::stopCluster(cl)
+  }
+  
+  buffer_grids <- stack(buffer_grids)
+  buffer_grids <- setNames(buffer_grids, paste0("buffer", seq(nlayers(buffer_grids))))
   
   return(buffer_grids)
 }
 
-#' Title
-#'
-#' @param x filename, character. Paths to raster files to be stacked using a
-#' gdal VRT
-#' @param resolution character ("highest"|"lowest"|"average"|"user", default = 'highest').
-#' Control the output resolution. 'user' must be used in combination with the
-#' 'res' argument
-#' @param res numeric, optional. Numeric c(x-res, y-res) to set the output 
-#' resolution of the stack if 'resolution' = 'user'
-#' @param extent numeric. c(xmin, ymin, xmax, ymax). Output extent of stack.
-#' If omitted then the bounding box of all inputs is used
-#' @param method character ("nearest" (default) | "bilinear" | "cubic" | "cubicspline" | "lanczos" | "average" | "mode")
-#' Resampling method
-#' @param allow_projection_difference logical, default = TRUE. Accept inputs 
-#' with different projections. Use only when the projection is not properly set
-#' for some of the input layers as this argument does not reproject
-#' @param filename character, optional. Filename for the .vrt file. If omitted
-#' then a tempfile is used
-#' @param overwrite logical, default = FALSE. Overwrite a .vrt file.
-#'
-#' @return
-#' @export
-#'
-#' @examples
-stack_vrt = function(x,
-                     resolution = 'highest',
-                     res = NULL,
-                     extent = NULL,
-                     method = 'nearest',
-                     allow_projection_difference = TRUE,
-                     filename = NULL,
-                     overwrite = FALSE) {
-  # some checks
-  ## use tempfile is filename not given
-  if (missing(filename))
-    filename = tempfile(fileext = '.vrt')
-  
-  ## check that res is specified if resolution = 'user'
-  if (resolution == 'user' & missing(res))
-    stop('For resolution = "user" then "res" must be specified')
-  
-  ## if res only contains a single number then assume equal x&y resolution
-  if (!is.null(res))
-    if (length(res) == 1)
-      res = c(res, res)
-  
-  # build vrt
-  buildvrt = pryr::partial(
-    gdalUtils::gdalbuildvrt,
-    gdalfile = x,
-    output.vrt = filename,
-    resolution = resolution,
-    separate = TRUE,
-    allow_projection_difference = allow_projection_difference,
-    r = method,
-    res = res,
-    overwrite = overwrite
-    )
-    
-  if (missing(extent)) {
-    buildvrt()
-  } else {
-    buildvrt(te = extent)
-  }
-
-  r = raster::brick(filename)
-  names(r) = tools::file_path_sans_ext(basename(x))
-  
-  return(r)
-}
