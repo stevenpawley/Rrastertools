@@ -13,18 +13,19 @@
 #' calculate grid distances to
 #' @param rasterlayer RasterLayer object to use as a template for the grid
 #' distances
-#' @param geomap n_jobs, number of processing cores, default = 1
+#' @param n_jobs number of processing cores, default = 1
 #'
 #' @return RasterStack of grid distances
 #' @export
 proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
 
   # some checks
-  if (is(rasterlayer, "RasterStack") | is(rasterlayer, "RasterBrick")) {
+  if (methods::is(rasterlayer, "RasterStack") | 
+      methods::is(rasterlayer, "RasterBrick")) {
     rasterlayer <- rasterlayer[[1]]
   }
 
-  if (is(sf_obj, "sf") == FALSE) {
+  if (methods::is(sf_obj, "sf") == FALSE) {
     stop("geomap must be a simple features dataframe")
   }
 
@@ -56,8 +57,8 @@ proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
     proximities <- lapply(1:raster::nlayers(rasterized_shapes), dist_fun)
   } else {
     cl <- parallel::makeCluster(n_jobs)
-    clusterExport(cl, "rasterized_shapes")
-    clusterEvalQ(cl, "raster")
+    parallel::clusterExport(cl, "rasterized_shapes")
+    parallel::clusterEvalQ(cl, "raster")
     proximities <- parallel::parLapply(cl, 1:raster::nlayers(rasterized_shapes), dist_fun)
     parallel::stopCluster(cl)
   }
@@ -75,8 +76,6 @@ proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
 #'
 #' @return RasterStack containing corner and centre coordinate EDM grids
 #' @export
-#'
-#' @examples
 euclideanDistanceFields <- function(object) {
   
   ext <- raster::extent(object)
@@ -127,12 +126,12 @@ euclideanDistanceFields <- function(object) {
   centre <- raster::distance(centre)
   
   EDM <- raster::stack(topleft, topright, centre, bottomleft, bottomright)
-  EDM <- setNames(EDM,
-                  c('EDM_topleft',
-                    'EDM_topright',
-                    'EDM_centre',
-                    'EDM_bottomleft',
-                    'EDM_bottomright'))
+  EDM <- stats::setNames(EDM,
+                         c('EDM_topleft',
+                           'EDM_topright',
+                           'EDM_centre',
+                           'EDM_bottomleft',
+                           'EDM_bottomright'))
   return(EDM)
 }
 
@@ -145,12 +144,12 @@ euclideanDistanceFields <- function(object) {
 #' @return RasterStack object
 #' @export
 rotatedCoordinateGrids <- function(object, n_angles) {
-  anglegrids <- as(object, "SpatialGridDataFrame")
+  anglegrids <- methods::as(object, "SpatialGridDataFrame")
   angles <- NISTunits::NISTdegTOradian(seq(from = 0, to = 180, length.out = n_angles))
 
   for (i in seq_along(angles)) {
     newlayer <- paste0("angle", i)
-    anglegrids[[newlayer]] <- coordinates(object)[, 1] + angles[i] * coordinates(object)[, 2]
+    anglegrids[[newlayer]] <- sp::coordinates(object)[, 1] + angles[i] * sp::coordinates(object)[, 2]
   }
 
   anglegrids <- anglegrids[2:ncol(anglegrids)]
@@ -170,19 +169,19 @@ xyCoordinateGrids <- function(object) {
   xy_coords <- raster::xyFromCell(object, cell = 1:raster::ncell(object))
   object <- raster::stack(object)
 
-  object[["xgrid"]] <- raster(
+  object[["xgrid"]] <- raster::raster(
     nrows = nrow(object),
     ncols = ncol(object),
-    ext = extent(object),
-    crs = crs(object),
+    ext = raster::extent(object),
+    crs = raster::crs(object),
     vals = xy_coords[, 1]
   )
 
-  object[["ygrid"]] <- raster(
+  object[["ygrid"]] <- raster::raster(
     nrows = nrow(object),
     ncols = ncol(object),
-    ext = extent(object),
-    crs = crs(object),
+    ext = raster::extent(object),
+    crs = raster::crs(object),
     vals = xy_coords[, 2]
   )
 
@@ -249,7 +248,7 @@ kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL)
       z = est$fhat
     )
   )
-  raster::projection(est.raster) <- sp::crs(data.points)
+  raster::projection(est.raster) <- sp::CRS(data.points)
 
   return(est.raster)
 }
@@ -291,15 +290,17 @@ distanceFromPointIntervals <- function(points, rasterlayer, field = NULL,
   }
 
   buffer_grids <- lapply(
-    split(picks, classes),
+    split(points, classes),
     function(points, raster_grid) {
-      raster::distanceFromPoints(raster_grid, xy = as(points, "Spatial"))
+      raster::distanceFromPoints(raster_grid,
+                                 xy = methods::as(points, "Spatial"))
     },
     raster_grid = rasterlayer
-  ) %>% stack()
-
-  names(buffer_grids) <- paste0("buffer", seq(1, nlayers(buffer_grids)))
-
+  )
+  buffer_grids <- raster::stack(buffer_grids)
+  buffer_grids <- stats::setNames(
+    buffer_grids,
+    paste0("buffer", seq(1, raster::nlayers(buffer_grids))))
   return(buffer_grids)
 }
 
@@ -315,14 +316,13 @@ distanceFromPointIntervals <- function(points, rasterlayer, field = NULL,
 #'
 #' @return RasterStack of sample-based EDMs
 #' @export
-#'
-#' @examples
 sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
   
   if (n_jobs == 1) {
     
     buffer_grids <- lapply(seq_along(sf_obj), function(i)
-      raster::distanceFromPoints(object, xy = as(sf_obj[i, ], "Spatial")))
+      raster::distanceFromPoints(object, 
+                                 xy = methods::as(sf_obj[i, ], "Spatial")))
     
   } else {
     
@@ -330,7 +330,7 @@ sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
     parallel::clusterEvalQ(cl, "raster")
     parallel::clusterExport(cl, c("object", "sf_obj"))
 
-    sf_obj <- as(sf_obj, "Spatial")
+    sf_obj <- methods::as(sf_obj, "Spatial")
     
     buffer_grids <- parallel::parLapply(cl, seq_along(sf_obj), function(i)
       raster::distanceFromPoints(object, xy = sf_obj[i, ]))
@@ -338,8 +338,10 @@ sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
     parallel::stopCluster(cl)
   }
   
-  buffer_grids <- stack(buffer_grids)
-  buffer_grids <- setNames(buffer_grids, paste0("buffer", seq(nlayers(buffer_grids))))
+  buffer_grids <- raster::stack(buffer_grids)
+  buffer_grids <- stats::setNames(
+    buffer_grids,
+    paste0("buffer", seq(raster::nlayers(buffer_grids))))
   
   return(buffer_grids)
 }

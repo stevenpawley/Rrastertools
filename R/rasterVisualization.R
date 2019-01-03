@@ -11,7 +11,7 @@ hillshadePCA <- function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
   # generate hillshades
   slope <- raster::terrain(x, opt = "slope")
   aspect <- raster::terrain(x, opt = "aspect")
-  azi_shades <- stack(lapply(azi, function(x) raster::hillShade(
+  azi_shades <- raster::stack(lapply(azi, function(x) raster::hillShade(
     slope, aspect,
     angle = x, normalize = T
   )))

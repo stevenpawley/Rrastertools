@@ -20,6 +20,9 @@ rastertoVector(rasterlayer, gapp = NULL, rmarea_km2, simplify_thres,
 
 \item{cycles}{Number of reduction and smoothing iterations}
 }
+\value{
+sf data.frame containing generalized polygons
+}
 \description{
 Raster to vector conversion with generalization
 }
