@@ -320,7 +320,7 @@ sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
   
   if (n_jobs == 1) {
     
-    buffer_grids <- lapply(seq_along(sf_obj), function(i)
+    buffer_grids <- lapply(1:nrow(sf_obj), function(i)
       raster::distanceFromPoints(object, 
                                  xy = methods::as(sf_obj[i, ], "Spatial")))
     
@@ -332,7 +332,7 @@ sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
 
     sf_obj <- methods::as(sf_obj, "Spatial")
     
-    buffer_grids <- parallel::parLapply(cl, seq_along(sf_obj), function(i)
+    buffer_grids <- parallel::parLapply(cl, 1:nrow(sf_obj), function(i)
       raster::distanceFromPoints(object, xy = sf_obj[i, ]))
     
     parallel::stopCluster(cl)
