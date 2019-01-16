@@ -18,53 +18,146 @@
 #' @return RasterStack of grid distances
 #' @export
 proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
-
+  
   # some checks
   if (methods::is(rasterlayer, "RasterStack") | 
       methods::is(rasterlayer, "RasterBrick")) {
     rasterlayer <- rasterlayer[[1]]
   }
-
+  
   if (methods::is(sf_obj, "sf") == FALSE) {
-    stop("geomap must be a simple features dataframe")
+    stop("sf_obj must be a simple features dataframe")
   }
-
+  
   if (missing(field)) {
     stop("field must be specified")
   }
-
+  
   # rasterize shapes based on field attribute
   rasterized_shapes <- fasterize::fasterize(
     raster = rasterlayer,
     sf = sf_obj,
-    by = field
-  )
+    by = field)
 
   raster_stats <- sapply(1:raster::nlayers(rasterized_shapes), function(i)
     raster::maxValue(rasterized_shapes[[i]]))
   invalid_layers <- which(is.na(raster_stats))
-
+  
   rasterized_shapes <- raster::dropLayer(rasterized_shapes, invalid_layers)
 
   # calculate distances
-  dist_fun <- function(i) {
-    prox <- raster::distance(rasterized_shapes[[i]])
-    names(prox) <- paste("proximity", names(rasterized_shapes)[[i]], sep = ".")
+  dist_fun <- function(i, object) {
+    prox <- raster::distance(object[[i]])
+    names(prox) <- paste("proximity", names(object)[[i]], sep = ".")
     return(prox)
   }
-
+  
   if (n_jobs == 1) {
-    proximities <- lapply(1:raster::nlayers(rasterized_shapes), dist_fun)
+    
+    proximities <- lapply(seq(1, raster::nlayers(rasterized_shapes)),
+                          dist_fun,
+                          object = rasterized_shapes)
+  
   } else {
-    cl <- parallel::makeCluster(n_jobs)
-    parallel::clusterExport(cl, "rasterized_shapes")
-    parallel::clusterEvalQ(cl, "raster")
-    proximities <- parallel::parLapply(cl, 1:raster::nlayers(rasterized_shapes), dist_fun)
-    parallel::stopCluster(cl)
+    
+    tryCatch(
+      expr = {
+        cl <- parallel::makeCluster(n_jobs)
+        parallel::clusterEvalQ(cl, library(raster))
+        parallel::clusterExport(cl, 
+                                c("dist_fun", "rasterized_shapes"), 
+                                envir = environment())
+        proximities <- parallel::parLapply(
+          cl = cl, 
+          X = seq(raster::nlayers(rasterized_shapes)), 
+          fun = dist_fun,
+          object = rasterized_shapes)
+        
+      }, error = function(e) {
+        stop('Problem with parallelized distance calc')
+      
+      }, finally = {
+        parallel::stopCluster(cl)
+      }
+    )
+    
   }
+  
   proximities <- raster::stack(proximities)
-
+  
   return(proximities)
+}
+
+
+#' Calculate grid distances to x,y,z spatial clusters in point features
+#' 
+#' Calculates RasterLayers representing proximities to x,y,z spatial clusters
+#' in simple features POINT geometries
+#'
+#' @param sf_obj sf data.frame containing POINT geometries
+#' @param field character, name of field for z value
+#' @param rasterlayer RasterLayer to use as a template
+#' @param n integer, number of spatial clusters, default = 10
+#' @param iter integer, maximum number of iterations for kmeans, default = 100
+#' @param n_jobs integer, parallel processing, default = 1
+#'
+#' @return RasterStack of grid distances to x,y,z clusters
+#' @export
+proximityPointClusters <- function(sf_obj, field, rasterlayer, n = 10,
+                                   iter = 100, n_jobs = 1) {
+  
+  km <- stats::kmeans(
+    x = cbind(sf::st_coordinates(sf_obj), sf_obj[[field]]),
+    centers = n,
+    iter.max = iter)
+  
+  clusters <- sf::st_as_sf(
+    x = as.data.frame(km$centers), coords = c("X", "Y"), crs = 3400)
+  clusters <- methods::as(clusters, "Spatial")
+  
+  fun <- function(i, sp_obj, object) {
+    raster::distanceFromPoints(object, xy = sp_obj[i, ])
+  }
+  
+  if (n_jobs == 1) {
+    
+    buffer_grids <- lapply(X = seq(nrow(clusters)),
+                           FUN = fun,
+                           object = rasterlayer,
+                           sp_obj = clusters)
+  } else {
+    
+    tryCatch(
+      expr = {
+        cl <- parallel::makeCluster(n_jobs)
+        parallel::clusterEvalQ(cl, library(raster))
+        parallel::clusterExport(cl, 
+                                c("fun", "rasterlayer", "clusters"), 
+                                envir = environment())
+        
+        buffer_grids <- parallel::parLapply(
+          cl = cl, 
+          X = seq(nrow(clusters)),
+          fun = fun,
+          object = rasterlayer,
+          sp_obj = clusters)
+        
+      }, error = function(e) {
+        stop('Problem with parallelized distance calc')
+        
+      }, finally = {
+        parallel::stopCluster(cl)
+      }
+    )
+    
+  }
+  
+  buffer_grids <- raster::stack(buffer_grids)
+  buffer_grids <- stats::setNames(
+    buffer_grids,
+    paste0("buffer", seq(1, raster::nlayers(buffer_grids))))
+  
+  return(buffer_grids)
 }
 
 #' Corner-based Euclidean Distance Fields
@@ -166,6 +259,10 @@ rotatedCoordinateGrids <- function(object, n_angles) {
 #' @return RasterStack object
 #' @export
 xyCoordinateGrids <- function(object) {
+  
+  if (methods::is(object, "RasterStack") | methods::is(object, "RasterBrick"))
+    object <- object[[1]]
+  
   xy_coords <- raster::xyFromCell(object, cell = 1:raster::ncell(object))
   object <- raster::stack(object)
 
@@ -198,7 +295,7 @@ xyCoordinateGrids <- function(object) {
 #' kernel density estimator, optional.
 #' @param xcells number of grid cells in x dimension of output raster
 #' @param ycells number of grid cells in y dimension of output raster
-#' @return
+#' @return RasterLayer with KDE
 #' @export
 kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL) {
 

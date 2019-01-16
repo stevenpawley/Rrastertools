@@ -16,6 +16,9 @@ kernel density estimator, optional.}
 
 \item{ycells}{number of grid cells in y dimension of output raster}
 }
+\value{
+RasterLayer with KDE
+}
 \description{
 2d kernel density estimation for raster data
 }
