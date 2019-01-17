@@ -78,6 +78,7 @@ cross_validate <- function(object, formula, data, param_grid = NULL,
     )
     
   } else {
+    
     folds = rsample::vfold_cv(data, v = n_splits) %>% 
       dplyr::mutate(test_predictions = purrr::map(.$splits, ~ {
         m <- estimator(formula = formula, data = rsample::analysis(.x))
@@ -185,9 +186,9 @@ pred_fun_ranger <- function(model, data, factor_ldf = NULL, ...) {
     
     for (name in factor_var_names) {
       data_for_level <- data[, which(colnames(data) == name)]
-      data[, which(colnames(data) == name)] <- factor_ldf[[name]][data_for_level, 'collapsed']
+      data[, which(colnames(data) == name)] <- 
+        factor_ldf[[name]][data_for_level, 'collapsed']
     }
-    
   }
   
   do.call(pryr::partial(stats::predict, object = model, data = data), 
