@@ -7,7 +7,7 @@
 #' @return list, containing hillshade pca and the associated prcomp class
 #' @export
 
-hillshadePCA <- function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
+hillshade_pca <- function(x, azi = seq(0, 180, 22.5)[1:8], n = 5000) {
   # generate hillshades
   slope <- raster::terrain(x, opt = "slope")
   aspect <- raster::terrain(x, opt = "aspect")

@@ -9,7 +9,8 @@
 #'
 #' @return sf data.frame containing generalized polygons
 #' @export
-rastertoVector <- function(rasterlayer, gapp = NULL, rmarea_km2, simplify_thres, smoothing_iter, cycles) {
+raster_to_vector <- function(rasterlayer, gapp = NULL, rmarea_km2,
+                             simplify_thres, smoothing_iter, cycles) {
 
   # initiate a temporary grass session
   if (missing(gapp)) {

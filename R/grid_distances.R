@@ -17,7 +17,7 @@
 #'
 #' @return RasterStack of grid distances
 #' @export
-proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
+dist_to_categories <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
   
   # some checks
   if (methods::is(rasterlayer, "RasterStack") | 
@@ -103,8 +103,8 @@ proximityMapFeatures <- function(sf_obj, field, rasterlayer, n_jobs = 1) {
 #'
 #' @return RasterStack of grid distances to x,y,z clusters
 #' @export
-proximityPointClusters <- function(sf_obj, field, rasterlayer, n = 10,
-                                   iter = 100, n_jobs = 1) {
+dist_to_clusters <- function(sf_obj, field, rasterlayer, n = 10,
+                                  iter = 100, n_jobs = 1) {
   
   km <- stats::kmeans(
     x = cbind(sf::st_coordinates(sf_obj), sf_obj[[field]]),
@@ -169,7 +169,7 @@ proximityPointClusters <- function(sf_obj, field, rasterlayer, n = 10,
 #'
 #' @return RasterStack containing corner and centre coordinate EDM grids
 #' @export
-euclideanDistanceFields <- function(object) {
+dist_to_corners <- function(object) {
   
   ext <- raster::extent(object)
   
@@ -232,13 +232,12 @@ euclideanDistanceFields <- function(object) {
 #' Produces RasterLayer objects filled with rotated coordinate values
 #'
 #' @param object RasterLayer object
-#' @param n_angles numeric, number of angles to rotate coordinates by
+#' @param n_angles vector of angles to rotate coordinates by
 #'
 #' @return RasterStack object
 #' @export
-rotatedCoordinateGrids <- function(object, n_angles) {
+rotated_grids <- function(object, angles) {
   anglegrids <- methods::as(object, "SpatialGridDataFrame")
-  angles <- NISTunits::NISTdegTOradian(seq(from = 0, to = 180, length.out = n_angles))
 
   for (i in seq_along(angles)) {
     newlayer <- paste0("angle", i)
@@ -258,7 +257,7 @@ rotatedCoordinateGrids <- function(object, n_angles) {
 #'
 #' @return RasterStack object
 #' @export
-xyCoordinateGrids <- function(object) {
+coordinate_grids <- function(object) {
   
   if (methods::is(object, "RasterStack") | methods::is(object, "RasterBrick"))
     object <- object[[1]]
@@ -297,7 +296,7 @@ xyCoordinateGrids <- function(object) {
 #' @param ycells number of grid cells in y dimension of output raster
 #' @return RasterLayer with KDE
 #' @export
-kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL) {
+kernel_density2d <- function(data.points, y = NULL, xcells = NULL, ycells = NULL) {
 
   # get the coordinates
   coords <- sp::coordinates(data.points)
@@ -362,7 +361,7 @@ kernelDensity2D <- function(data.points, y = NULL, xcells = NULL, ycells = NULL)
 #'
 #' @return RasterStack object of point distances
 #' @export
-distanceFromPointIntervals <- function(points, rasterlayer, field = NULL,
+dist_to_intervals <- function(points, rasterlayer, field = NULL,
                                        n_classes = 10,
                                        method = "equal_intervals") {
   if (missing(field)) {
@@ -413,7 +412,7 @@ distanceFromPointIntervals <- function(points, rasterlayer, field = NULL,
 #'
 #' @return RasterStack of sample-based EDMs
 #' @export
-sampleEuclideanDistanceFields <- function(object, sf_obj, n_jobs = 1) {
+dist_to_features <- function(object, sf_obj, n_jobs = 1) {
   
   if (n_jobs == 1) {
     

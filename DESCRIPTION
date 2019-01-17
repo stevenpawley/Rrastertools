@@ -1,6 +1,6 @@
-Package: Rrastertools
+Package: spmTools
 Type: Package
-Title: Raster geoprocessing functions
+Title: Spatial prediction model tools
 Version: 0.1.0
 Author: Steven Pawley
 Maintainer: Steven Pawley <dr.stevenpawley@gmail.com>
