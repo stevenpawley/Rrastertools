@@ -232,7 +232,7 @@ dist_to_corners <- function(object) {
 #' Produces RasterLayer objects filled with rotated coordinate values
 #'
 #' @param object RasterLayer object
-#' @param n_angles vector of angles to rotate coordinates by
+#' @param angles vector of angles to rotate coordinates by
 #'
 #' @return RasterStack object
 #' @export
@@ -241,7 +241,8 @@ rotated_grids <- function(object, angles) {
 
   for (i in seq_along(angles)) {
     newlayer <- paste0("angle", i)
-    anglegrids[[newlayer]] <- sp::coordinates(object)[, 1] + angles[i] * sp::coordinates(object)[, 2]
+    anglegrids[[newlayer]] <- 
+      sp::coordinates(object)[, 1] + angles[i] * sp::coordinates(object)[, 2]
   }
 
   anglegrids <- anglegrids[2:ncol(anglegrids)]
@@ -408,7 +409,8 @@ dist_to_intervals <- function(points, rasterlayer, field = NULL,
 #'
 #' @param object RasterLayer to use as template
 #' @param sf_obj Simple features object containing POINT geometries
-#' @param n_jobs numeric, optionally use parallel calculation over multiple cores
+#' @param n_jobs numeric, optionally use parallel calculation over multiple
+#' cores
 #'
 #' @return RasterStack of sample-based EDMs
 #' @export
@@ -441,4 +443,3 @@ dist_to_features <- function(object, sf_obj, n_jobs = 1) {
   
   return(buffer_grids)
 }
-
