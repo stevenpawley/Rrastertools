@@ -230,6 +230,8 @@ dist_to_corners <- function(object) {
 
 
 #' Produces RasterLayer objects filled with rotated coordinate values
+#' 
+#' Rotates the coordinate system around the x-axis by the specified angles
 #'
 #' @param object RasterLayer object
 #' @param angles vector of angles to rotate coordinates by
@@ -237,12 +239,25 @@ dist_to_corners <- function(object) {
 #' @return RasterStack object
 #' @export
 rotated_grids <- function(object, angles) {
+  
+  # some checks
+  if (is(object, "RasterStack") | is(object, "RasterBrick"))
+    object <- object[[1]]
+  
+  angles <- NISTunits::NISTdegTOradian(angles)
+  
   anglegrids <- methods::as(object, "SpatialGridDataFrame")
-
+  
+  x <- sp::coordinates(anglegrids)[, 1]
+  y <- sp::coordinates(anglegrids)[, 2]
+  
   for (i in seq_along(angles)) {
-    newlayer <- paste0("angle", i)
-    anglegrids[[newlayer]] <- 
-      sp::coordinates(object)[, 1] + angles[i] * sp::coordinates(object)[, 2]
+    
+    xnew <- x * cos(angles[i]) - y * sin(angles[i])
+    ynew <- x * sin(angles[i]) + y * cos(angles[i])
+    
+    newlayer <- paste0("angle", i)  
+    anglegrids[[newlayer]] <- xnew
   }
 
   anglegrids <- anglegrids[2:ncol(anglegrids)]
