@@ -11,7 +11,6 @@
 #' param_grid :  data.frame of param_grid with additional score column
 #' @export
 #' @importFrom magrittr "%>%"
-#' @importFrom magrittr "%$%"
 ranger_tuned <- function(object, formula, param_grid, data) {
   
   # iterate through each hyperparameter set and score oobe
