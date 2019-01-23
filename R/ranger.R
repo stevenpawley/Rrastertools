@@ -5,19 +5,24 @@
 #' @param param_grid data.frame of hyperparameters, with names of
 #' hyperparameters as columns and each trial as a row
 #' @param data data.frame of training data
+#' @param ... additional named arguments to pass onto ranger function
 #'
 #' @return list
 #' best_model : model refitted using best hyperparameters
 #' param_grid :  data.frame of param_grid with additional score column
 #' @export
 #' @importFrom magrittr "%>%"
-ranger_tuned <- function(object, formula, param_grid, data) {
+ranger_tuned <- function(object, formula, param_grid, data, ...) {
+  
+  kwargs <- list(...)
   
   # iterate through each hyperparameter set and score oobe
   scores <- 
     iterators::iter(param_grid, by = 'row') %>%
     sapply(function(pm) {
-      m <- do.call(pryr::partial(object, data = data, formula = formula), pm)
+      pm <- c(pm, kwargs)
+      m <- do.call(pryr::partial(
+        object, data = data, formula = formula), pm)
       m$prediction.error
       })
   
@@ -46,11 +51,12 @@ ranger_tuned <- function(object, formula, param_grid, data) {
 #' @param keep_models logical, save each model to the tibble per cross
 #' validation fold. Note that this can consume a lot of memory for large
 #' datasets
+#' @param ... additional named arguments to pass onto ranger function
 #' @return tibble containing cross validation results
 #' @export
 #' @importFrom magrittr "%>%"
 cross_validate <- function(object, formula, data, param_grid = NULL,
-                           n_splits = 10, keep_models = FALSE) {
+                           n_splits = 10, keep_models = FALSE, ...) {
   
   me <- function(truth, estimate)
     return(mean(truth - estimate))
