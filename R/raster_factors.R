@@ -14,7 +14,7 @@
 merge_raster_factors <- function(x, y, n = 50) {
   
   # some checks
-  if (is.null(levels(x)[[1]]))
+  if (is.null(levels(x)[[1]][, 2]))
     stop('RasterLayer does not contain any factor levels')
   
   if (ncol(levels(x)[[1]]) < 2 | names(levels(x)[[1]])[1] != 'ID')
