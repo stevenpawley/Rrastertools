@@ -8,6 +8,9 @@
 #'
 #' @return Rasterlayer after morphological filtering
 #' @export
+#' @importFrom raster focal
+#' @importFrom spatial.tools sfQuickInit rasterEngine sfQuickStop
+#' @importFrom parallel detectCores
 morphological_filter <- function(rasterlayer, size = 3, type = "closing", parallel = F) {
 
   # single core morphological closing using the raster package
@@ -15,8 +18,8 @@ morphological_filter <- function(rasterlayer, size = 3, type = "closing", parall
     f <- matrix(1, size, size)
 
     if (type == "closing") {
-      dilated <- raster::focal(rasterlayer, w = f, fun = max)
-      filtered <- raster::focal(dilated, w = f, fun = min)
+      dilated <- focal(rasterlayer, w = f, fun = max)
+      filtered <- focal(dilated, w = f, fun = min)
     }
 
 
@@ -26,16 +29,16 @@ morphological_filter <- function(rasterlayer, size = 3, type = "closing", parall
       dilation <- function(inraster) maxfocal <- apply(inraster, 3, max)
       erosion <- function(inraster) maxfocal <- apply(inraster, 3, min)
 
-      spatial.tools::sfQuickInit(cpus = parallel::detectCores())
-      dilated <- spatial.tools::rasterEngine(
+      sfQuickInit(cpus = detectCores())
+      dilated <- rasterEngine(
         inraster = rasterlayer, fun = dilation,
         window_dims = c(size, size)
       )
-      filtered <- spatial.tools::rasterEngine(
+      filtered <- rasterEngine(
         inraster = dilated, fun = erosion,
         window_dims = c(size, size)
       )
-      spatial.tools::sfQuickStop()
+      sfQuickStop()
     }
   }
 
