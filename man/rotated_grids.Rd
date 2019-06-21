@@ -15,5 +15,5 @@ rotated_grids(object, angles)
 RasterStack object
 }
 \description{
-Produces RasterLayer objects filled with rotated coordinate values
+Rotates the coordinate system around the x-axis by the specified angles
 }
